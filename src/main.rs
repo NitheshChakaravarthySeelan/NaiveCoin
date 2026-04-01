@@ -1,3 +1,11 @@
+use crate::types::block::Block;
+
+mod types;
+
 fn main() {
-    println!("Hello, world!");
+
+}
+
+fn generate_next_block(block_data: String) -> Block {
+    const prev_block: Block = 
 }
