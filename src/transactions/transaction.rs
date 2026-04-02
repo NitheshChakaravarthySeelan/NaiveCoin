@@ -4,6 +4,8 @@ use sha2::{Sha256, Digest};
 use hex;
 use std::collections::HashSet;
 
+pub const COINBASE_AMOUNT: i32 = 50;
+
 #[derive(Clone, Debug)]
 pub struct TxOut {
     pub address: String,
@@ -230,4 +232,23 @@ pub fn update_unspent_tx_outs(new_txs: &[Transaction], a_unspent_tx_outs: &[Unsp
 
     resulting.extend(new_unspent_tx_outs);
     resulting
+}
+
+pub fn validate_coinbase_tx(tx: &Transaction, block_index: u32) -> bool {
+    if tx.tx_ins.len() != 1 {
+        return false;
+    }
+    if tx.tx_outs.len() != 1 {
+        return false;
+    }
+    if tx.tx_ins[0].tx_out_id != String::from("0".repeat(64)) {
+        return false;
+    }
+    if tx.tx_ins[0].tx_out_index != 0 {
+        return false;
+    }
+    if tx.tx_outs[0].amount != COINBASE_AMOUNT {
+        return false;
+    }
+    return true;
 }
