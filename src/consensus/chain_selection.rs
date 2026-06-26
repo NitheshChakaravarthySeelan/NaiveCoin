@@ -1,11 +1,8 @@
-mod chain;
-
 use crate::types::block::Block;
-use crate::types::chain::isValidChain;
+use crate::types::chain::is_valid_chain;
 
-/// Longest number of block in the chain
-pub fn replace_chain(chain: &mut Vec<Block>, newChain: Vec<Block>) {
-    if isValidChain(&newChain) && chain.len() < newChain.len() {
-        *chain = newChain;
+pub fn replace_chain(chain: &mut Vec<Block>, new_chain: Vec<Block>) {
+    if is_valid_chain(&new_chain) && chain.len() < new_chain.len() {
+        *chain = new_chain;
     }
 }

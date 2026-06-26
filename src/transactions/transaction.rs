@@ -1,25 +1,26 @@
-use secp256k1::{Secp256k1, SecretKey, Message, PublicKey};
+use secp256k1::{Secp256k1, SecretKey, PublicKey, Message};
 use secp256k1::ecdsa::Signature;
 use sha2::{Sha256, Digest};
+use serde::{Serialize, Deserialize};
 use hex;
 use std::collections::HashSet;
 
 pub const COINBASE_AMOUNT: i32 = 50;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TxOut {
     pub address: String,
     pub amount: i32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TxIn {
     pub tx_out_id: String,
     pub tx_out_index: u32,
     pub signature: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: String,
     pub tx_ins: Vec<TxIn>,
@@ -37,6 +38,12 @@ pub struct UnspentTxOut {
 impl TxOut {
     pub fn new(address: String, amount: i32) -> TxOut {
         TxOut { address, amount }
+    }
+}
+
+impl TxIn {
+    pub fn new(tx_out_id: String, tx_out_index: u32, signature: String) -> TxIn {
+        TxIn { tx_out_id, tx_out_index, signature }
     }
 }
 
@@ -69,7 +76,7 @@ pub fn get_transaction_id(tx: &Transaction) -> String {
     hex::encode(result)
 }
 
-fn hash_tx_id(tx_id: &str) -> [u8; 32] {
+pub fn hash_tx_id(tx_id: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(tx_id.as_bytes());
     let bytes = hasher.finalize();
@@ -90,12 +97,14 @@ pub fn sign_tx_in(tx: &Transaction, tx_in_index: usize, private_key: &str, unspe
     let tx_in = &tx.tx_ins[tx_in_index];
     let _referenced_unspent_tx_out = find_unspent_tx_out(tx_in, unspent_outputs);
 
-    let secret_key_bytes = hex::decode(private_key).expect("invalid private key hex");
-    let secret_key = SecretKey::from_slice(&secret_key_bytes).expect("invalid private key");
+    let secret_key_bytes: [u8; 32] = hex::decode(private_key)
+        .expect("invalid private key hex")
+        .try_into()
+        .expect("invalid private key length");
+    let secret_key = SecretKey::from_byte_array(secret_key_bytes).expect("invalid private key");
 
     let secp = Secp256k1::signing_only();
-    let message = Message::from_slice(&hash_tx_id(&tx.id)).expect("invalid message length");
-    let sig = secp.sign_ecdsa(&message, &secret_key);
+    let sig = secp.sign_ecdsa(Message::from_digest(hash_tx_id(&tx.id)), &secret_key);
     hex::encode(sig.serialize_der())
 }
 
@@ -110,8 +119,7 @@ pub fn get_tx_in_amount(tx_in: &TxIn, unspent_outputs: &[UnspentTxOut]) -> i32 {
 pub fn verify_signature(utxo_address: &str, tx_id: &str, signature: &str) -> bool {
     let secp = Secp256k1::verification_only();
 
-    let result = hash_tx_id(tx_id);
-    let message = Message::from_slice(&result).unwrap();
+    let msg_hash = hash_tx_id(tx_id);
 
     let public_key_bytes = hex::decode(utxo_address).ok();
     if public_key_bytes.is_none() { return false; }
@@ -120,10 +128,10 @@ pub fn verify_signature(utxo_address: &str, tx_id: &str, signature: &str) -> boo
 
     let signature_bytes = hex::decode(signature).ok();
     if signature_bytes.is_none() { return false; }
-    let signature = Signature::from_slice(&signature_bytes.unwrap());
+    let signature = Signature::from_der(&signature_bytes.unwrap());
     if signature.is_err() { return false; }
 
-    secp.verify_ecdsa(&message, &signature.unwrap(), &public_key.unwrap()).is_ok()
+    secp.verify_ecdsa(Message::from_digest(msg_hash), &signature.unwrap(), &public_key.unwrap()).is_ok()
 }
 
 pub fn validate_tx_in(tx: &Transaction, tx_in: &TxIn, unspent_outputs: &[UnspentTxOut]) -> bool {
@@ -234,7 +242,7 @@ pub fn update_unspent_tx_outs(new_txs: &[Transaction], a_unspent_tx_outs: &[Unsp
     resulting
 }
 
-pub fn validate_coinbase_tx(tx: &Transaction, block_index: u32) -> bool {
+pub fn validate_coinbase_tx(tx: &Transaction, _block_index: u32) -> bool {
     if tx.tx_ins.len() != 1 {
         return false;
     }
@@ -250,5 +258,5 @@ pub fn validate_coinbase_tx(tx: &Transaction, block_index: u32) -> bool {
     if tx.tx_outs[0].amount != COINBASE_AMOUNT {
         return false;
     }
-    return true;
+    true
 }

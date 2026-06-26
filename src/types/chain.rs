@@ -1,52 +1,74 @@
-mod block;
+use chrono::Utc;
+use crate::types::block::{Block, calculate_hash, calculate_merkle_root};
 
 pub struct BlockChain {
-    blocks: Vec<Block>,
+    pub blocks: Vec<Block>,
 }
 
 impl BlockChain {
-    fn new() -> BlockChain {
-        const genesis_block: Block = Block::new(0,"816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7",null,Utc.now().timestamp(),"my genesis block!!");
+    pub fn new() -> BlockChain {
+        let timestamp = Utc::now().timestamp() as u64;
+        let genesis_hash = calculate_hash(
+            0, "0", timestamp, &[],
+            &calculate_merkle_root(&[]), 0, 1, 0, "genesis",
+        );
+        let genesis_block = Block::new(
+            0,
+            genesis_hash,
+            "0".to_string(),
+            timestamp,
+            vec![],
+            1,
+            0,
+            "genesis".to_string(),
+        );
         BlockChain {
             blocks: vec![genesis_block],
         }
     }
 
-    fn add_block(&mut self, block: Block) {
+    pub fn add_block(&mut self, block: Block) {
         self.blocks.push(block);
     }
 
-    fn  generate_next_block(&self, block_data: String) -> Block {
-        const prev_block: Block = self.blocks.last().unwrap();
-        let next_index = prev_block.get_index() + 1;
-        let next_timestamp = Utc::now().timestamp();
-        const next_hash: String = calculateHash(next_index, prev_block.get_hash(), next_timestamp, block_data);
-        Block.new(next_index, next_hash, prev_block.get_hash(), next_timestamp, block_data)
+    pub fn get_latest_block(&self) -> &Block {
+        self.blocks.last().unwrap()
+    }
+
+    pub fn is_valid_chain(&self) -> bool {
+        is_valid_chain(&self.blocks)
     }
 }
 
-pub fn isValidNewBlock(new_block: Block, previous_block: Block) -> bool {
-    if previous_block.get_index() + 1 != new_block.get_index() {
+pub fn is_valid_new_block(new_block: &Block, previous_block: &Block) -> bool {
+    if previous_block.index + 1 != new_block.index {
         return false;
     }
-    if previous_block.get_hash() != new_block.get_previous_hash() {
+    if previous_block.hash != new_block.previous_hash {
         return false;
     }
-    if calculateHash(new_block.get_index(), new_block.get_previous_hash(), new_block.get_timestamp(), new_block.get_data()) != new_block.get_hash() {
-        return false;
-    }
-    true
+    let recalculated = calculate_hash(
+        new_block.index,
+        &new_block.previous_hash,
+        new_block.timestamp,
+        &new_block.data,
+        &new_block.merkle_root,
+        new_block.nonce,
+        new_block.difficulty,
+        new_block.minter_balance,
+        &new_block.minter_address,
+    );
+    recalculated == new_block.hash
 }
 
-pub fn isValidChain(chain: Vec<Block>) -> bool {
-    let mut last_block = chain[0];
-    let mut i = 1;
-    while i < chain.len() {
-        if !isValidNewBlock(chain[i], last_block) {
+pub fn is_valid_chain(chain: &[Block]) -> bool {
+    if chain.is_empty() {
+        return false;
+    }
+    for i in 1..chain.len() {
+        if !is_valid_new_block(&chain[i], &chain[i - 1]) {
             return false;
         }
-        last_block = chain[i];
-        i += 1;
     }
     true
 }
